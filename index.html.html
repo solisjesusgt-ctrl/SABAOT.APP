@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SABAOT - Lector y Desplazador Automático para Músicos</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+    darkMode: 'class',
+    theme: { extend: { colors: {
+        sabaot: { red: '#e10600', redHover: '#ff1a15', dark: '#0a0a0a', darker: '#000000' }
+    }}}
+}
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+</script>
+<style>
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: #000000; }
+::-webkit-scrollbar-thumb { background: #e10600; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #ff1a15; }
+
+/* Evita que el contenedor del PDF se encoja dentro del scroll */
+#pdf-render-container { flex-shrink: 0; }
+
+/* ESTILOS BOTONES Y CONTENEDORES 3D METÁLICOS */
+.btn-3d-red {
+    background: linear-gradient(180deg, #ff3b30 0%, #e10600 50%, #990000 100%);
+    border-top: 1px solid rgba(255, 255, 255, 0.4);
+    border-bottom: 2px solid rgba(0, 0, 0, 0.8);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 4px 6px rgba(0, 0, 0, 0.6), 0 1px 3px rgba(0,0,0,0.4);
+    text-shadow: 0 -1px 1px rgba(0, 0, 0, 0.7);
+    transition: all 0.1s ease;
+}
+.btn-3d-red:hover {
+    background: linear-gradient(180deg, #ff5248 0%, #ff1a15 50%, #b30000 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 5px 8px rgba(225, 6, 0, 0.4), 0 1px 3px rgba(0,0,0,0.5);
+}
+.btn-3d-red:active {
+    transform: translateY(2px);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6), 0 1px 2px rgba(0,0,0,0.4);
+}
+
+.btn-3d-metal {
+    background: linear-gradient(180deg, #3a3a3d 0%, #222225 50%, #141416 100%);
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    border-bottom: 2px solid rgba(0, 0, 0, 0.9);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.15), 0 3px 5px rgba(0, 0, 0, 0.5);
+    text-shadow: 0 -1px 1px rgba(0, 0, 0, 0.8);
+    transition: all 0.1s ease;
+}
+.btn-3d-metal:hover {
+    background: linear-gradient(180deg, #4a4a4e 0%, #2d2d31 50%, #1c1c1f 100%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.25), 0 4px 7px rgba(0, 0, 0, 0.6);
+}
+.btn-3d-metal:active {
+    transform: translateY(2px);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.7), 0 1px 2px rgba(0,0,0,0.5);
+}
+
+.btn-3d-amber {
+    background: linear-gradient(180deg, #fbbf24 0%, #f59e0b 50%, #b45309 100%);
+    border-top: 1px solid rgba(255, 255, 255, 0.5);
+    border-bottom: 2px solid rgba(0, 0, 0, 0.8);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 4px 6px rgba(0, 0, 0, 0.6);
+    text-shadow: 0 1px 1px rgba(255, 255, 255, 0.3);
+    transition: all 0.1s ease;
+}
+.btn-3d-amber:hover {
+    background: linear-gradient(180deg, #fcd34d 0%, #fbbf24 50%, #d97706 100%);
+}
+.btn-3d-amber:active {
+    transform: translateY(2px);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.6);
+}
+
+/* Tarjeta 3D Metálica para Versículo */
+.verse-card-3d {
+    background: linear-gradient(180deg, #18181c 0%, #0d0d0f 100%);
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    border-bottom: 2px solid rgba(0, 0, 0, 0.9);
+    border-left: 1px solid rgba(255, 255, 255, 0.08);
+    border-right: 1px solid rgba(0, 0, 0, 0.5);
+    box-shadow: inset 0 1px 3px rgba(255,255,255,0.05), inset 0 -2px 4px rgba(0,0,0,0.8), 0 6px 12px rgba(0, 0, 0, 0.7);
+}
+</style>
+</head>
+<body class="bg-sabaot-darker text-slate-100 min-h-screen antialiased selection:bg-sabaot-red selection:text-white flex flex-col">
+
+<!-- Header -->
+<header class="bg-sabaot-dark border-b border-red-950 sticky top-0 z-50 px-4 py-3" id="app-header">
+    <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+            <div class="bg-red-600/10 p-2.5 rounded-xl border border-red-600/30 text-sabaot-red shadow-inner">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3"></path></svg>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
+                    SABAOT
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-red-600/20 text-red-400 font-mono border border-red-800/40">v2.3.0</span>
+                </h1>
+                <p class="text-xs text-slate-400">Desplazador y Analizador Automático para Músicos</p>
+            </div>
+        </div>
+    </div>
+</header>
+
+<main class="flex-1 flex flex-col" id="main-container">
+
+    <!-- Upload -->
+    <div id="view-upload" class="max-w-2xl mx-auto my-12 p-8 bg-sabaot-dark/80 border border-red-950 rounded-2xl shadow-2xl backdrop-blur-md w-full mx-4 sm:mx-auto">
+        <div class="text-center mb-6">
+            <h2 class="text-2xl font-bold text-white mb-2">Carga tu partitura o cancionero PDF en SABAOT</h2>
+            <p class="text-sm text-slate-400 max-w-md mx-auto">Análisis automático de tonalidad y secciones, listo para scroll manos libres.</p>
+        </div>
+
+        <!-- Zona de carga de archivos -->
+        <div id="drop-zone" class="border-2 border-dashed border-red-950 hover:border-sabaot-red bg-sabaot-darker/50 rounded-xl p-8 text-center transition-all cursor-pointer">
+            <input type="file" id="pdf-file-input" accept="application/pdf,.pdf" class="hidden">
+            <div id="upload-content">
+                <p class="text-sm text-slate-300 font-medium mb-1">Arrastra y suelta tu archivo PDF aquí, o <span class="text-sabaot-red underline font-bold">examina tus archivos</span></p>
+                <p class="text-xs text-slate-500 mt-2">Soporta cifrados, letras y partituras en PDF estándar</p>
+            </div>
+            <div id="loading-content" class="hidden flex-col items-center justify-center py-6 gap-3">
+                <div class="w-10 h-10 border-4 border-sabaot-red border-t-transparent rounded-full animate-spin"></div>
+                <p class="text-sm font-medium text-sabaot-red">Analizando estructura musical...</p>
+            </div>
+        </div>
+
+        <!-- Recuadro Decorativo con Versículo Bíblico (Abajo de Carga de Archivos) -->
+        <div id="bible-verse-container" class="mt-6 p-5 verse-card-3d rounded-xl text-center flex flex-col justify-center items-center min-h-[90px]">
+            <p id="bible-verse-text" class="text-xs sm:text-sm italic text-slate-200 mb-2 leading-relaxed font-serif text-center w-full block">Cargando inspiración...</p>
+            <span id="bible-verse-ref" class="text-[11px] font-mono text-sabaot-red font-bold tracking-wide uppercase block"></span>
+        </div>
+    </div>
+
+    <!-- Workspace -->
+    <div id="view-workspace" class="hidden max-w-7xl mx-auto p-4 flex-col gap-4 h-[calc(100vh-5rem)] w-full">
+        <div class="bg-sabaot-dark border border-red-950 rounded-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4 shadow-xl" id="workspace-top-bar">
+            <div class="flex items-center gap-3">
+                <button onclick="resetWorkspace()" class="p-2.5 btn-3d-metal text-slate-200 rounded-xl" title="Cargar otro PDF">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
+                </button>
+                <div>
+                    <h2 id="song-title-display" class="text-base font-bold text-white flex items-center gap-2">Título <span id="song-key-display" class="text-xs px-2 py-0.5 rounded-full bg-red-600/20 text-red-400 font-mono border border-red-900/50">Key: C</span></h2>
+                    <p id="song-filename-display" class="text-xs text-slate-400">Archivo: documento.pdf</p>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-3 flex-wrap">
+                <!-- SELECTOR DE PÁGINA RESTRUCTURADO Y TOTALMENTE FUNCIONAL -->
+                <div class="flex items-center gap-2 bg-sabaot-darker px-3 py-1.5 rounded-xl border border-red-950 text-xs shadow-inner">
+                    <button id="btn-page-prev" onclick="changePage(-1)" class="px-2.5 py-1 btn-3d-metal text-white rounded-lg font-bold hover:scale-105 active:scale-95 transition-transform" title="Página Anterior">◀</button>
+                    <input id="page-input" type="number" min="1" value="1"
+                           onchange="goToPage(this.value)"
+                           onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();goToPage(this.value);}"
+                           class="w-14 bg-black text-white text-center font-mono rounded-md py-0.5 border border-red-950 outline-none focus:border-sabaot-red shadow-inner">
+                    <span class="text-slate-400">/</span>
+                    <span id="page-total" class="text-white font-mono">1</span>
+                    <button id="btn-page-next" onclick="changePage(1)" class="px-2.5 py-1 btn-3d-metal text-white rounded-lg font-bold hover:scale-105 active:scale-95 transition-transform" title="Página Siguiente">▶</button>
+                </div>
+
+                <button onclick="toggleFullscreenLandscape()" class="flex items-center gap-2 px-4 py-2.5 btn-3d-red text-white rounded-xl text-xs font-semibold">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
+                    Pantalla Completa
+                </button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 flex-1 overflow-hidden min-h-0">
+            <!-- VIEWPORT DEL PDF -->
+            <div id="scroll-viewport" class="lg:col-span-3 bg-white border border-red-950 rounded-2xl overflow-y-auto p-6 relative shadow-inner cursor-pointer h-[65vh] lg:h-full min-h-0">
+                <button onclick="event.stopPropagation(); toggleFullscreenLandscape();" class="fixed bottom-6 right-6 z-30 btn-3d-red text-white p-3 rounded-2xl flex items-center gap-2">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
+                    <span class="text-xs font-bold hidden sm:inline">Modo Inmersivo</span>
+                </button>
+                <div class="absolute top-4 left-4 bg-black/70 border border-white/10 px-3 py-1.5 rounded-xl text-xs text-white pointer-events-none z-10 shadow-md">Toca para Pausar / Reanudar</div>
+                <div id="pdf-render-container" class="w-full flex flex-col items-center py-8"></div>
+            </div>
+
+            <div class="flex flex-col gap-4 overflow-y-auto" id="sidebar-controls">
+                <div class="bg-sabaot-dark border border-red-950 rounded-2xl p-4 shadow-xl">
+                    <h3 class="text-sm font-bold text-white mb-2">Nitidez / Calidad PDF</h3>
+                    <div class="grid grid-cols-4 gap-1 bg-sabaot-darker p-1 rounded-xl border border-red-950 text-xs">
+                        <button onclick="setQuality('low')" id="q-low" class="py-1.5 rounded-lg text-slate-400 font-medium">Baja</button>
+                        <button onclick="setQuality('medium')" id="q-medium" class="py-1.5 rounded-lg text-slate-400 font-medium">Media</button>
+                        <button onclick="setQuality('high')" id="q-high" class="py-1.5 rounded-lg btn-3d-red text-white font-bold">Alta</button>
+                        <button onclick="setQuality('ultra')" id="q-ultra" class="py-1.5 rounded-lg text-slate-400 font-medium">Ultra</button>
+                    </div>
+                </div>
+                <div class="bg-sabaot-dark border border-red-950 rounded-2xl p-4 shadow-xl">
+                    <div class="flex items-center justify-between mb-3 pb-2 border-b border-red-950">
+                        <h3 class="text-sm font-bold text-white">Presets SABAOT</h3>
+                        <button onclick="saveSpeedPreset()" class="px-3 py-1 btn-3d-red text-white rounded-lg text-xs font-semibold">Guardar</button>
+                    </div>
+                    <div class="grid grid-cols-5 gap-1 mb-3">
+                        <button onclick="applySpeedPreset(0.3)" class="py-1 btn-3d-metal text-sabaot-red rounded-lg text-[10px] font-bold">0.3</button>
+                        <button onclick="applySpeedPreset(1.0)" class="py-1 btn-3d-metal text-sabaot-red rounded-lg text-[10px] font-bold">1.0</button>
+                        <button onclick="applySpeedPreset(3.0)" class="py-1 btn-3d-metal text-sabaot-red rounded-lg text-[10px] font-bold">3.0</button>
+                        <button onclick="applySpeedPreset(6.0)" class="py-1 btn-3d-metal text-sabaot-red rounded-lg text-[10px] font-bold">6.0</button>
+                        <button onclick="applySpeedPreset(10.0)" class="py-1 btn-3d-metal text-sabaot-red rounded-lg text-[10px] font-bold">10.0</button>
+                    </div>
+                    <div id="presets-list" class="space-y-2 max-h-32 overflow-y-auto text-xs">
+                        <p class="text-slate-500 text-center py-2">No hay presets guardados aún.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-sabaot-dark/95 border border-red-950 rounded-2xl p-4 shadow-xl backdrop-blur-md flex flex-wrap items-center justify-between gap-4" id="controller-bar">
+            <div class="flex items-center gap-2">
+                <button id="play-pause-btn" onclick="togglePlay()" class="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm btn-3d-red text-white">
+                    <span id="play-btn-text">Iniciar Scroll</span>
+                </button>
+                <button onclick="resetScroll()" class="p-2.5 btn-3d-metal text-slate-300 rounded-xl" title="Reiniciar">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                </button>
+            </div>
+            <div class="flex items-center gap-3 flex-1 max-w-sm mx-auto">
+                <div class="flex-1 flex flex-col gap-1">
+                    <div class="flex justify-between text-xs font-medium">
+                        <span class="text-slate-400">Velocidad SABAOT</span>
+                        <span id="speed-val-display" class="text-sabaot-red font-mono font-bold text-sm">1.5</span>
+                    </div>
+                    <input type="range" id="speed-range" min="0.1" max="20.0" step="0.1" value="1.5" oninput="changeSpeed(Number(this.value))" class="w-full accent-sabaot-red bg-sabaot-darker h-2 rounded-lg cursor-pointer">
+                </div>
+                <div class="flex items-center gap-1">
+                    <button onclick="adjustSpeed(-0.1)" class="px-2.5 py-1 btn-3d-metal text-slate-200 rounded-lg text-xs font-bold">-0.1</button>
+                    <button onclick="adjustSpeed(0.1)" class="px-2.5 py-1 btn-3d-metal text-slate-200 rounded-lg text-xs font-bold">+0.1</button>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <button onclick="jumpStep(-250)" class="px-3 py-2 btn-3d-metal text-slate-200 rounded-xl text-xs font-bold">Subir</button>
+                <button onclick="jumpStep(250)" class="px-3 py-2 btn-3d-metal text-slate-200 rounded-xl text-xs font-bold">Bajar</button>
+            </div>
+        </div>
+    </div>
+</main>
+
+<!-- OVERLAY PANTALLA COMPLETA -->
+<div id="fs-overlay" class="hidden fixed inset-0 bg-black z-[9999] flex-col">
+    <div id="fs-pdf-container" class="flex-1 overflow-y-auto bg-white min-h-0"></div>
+    <div class="bg-sabaot-dark border-t-2 border-sabaot-red px-3 py-2 flex items-center justify-between gap-3 flex-wrap">
+        <button id="fs-play-btn" onclick="togglePlay()" class="px-4 py-2 btn-3d-red text-white rounded-xl text-xs font-bold">
+            <span id="fs-play-text">Iniciar</span>
+        </button>
+
+        <div class="flex items-center gap-2 flex-1 max-w-md">
+            <span class="text-slate-300 text-xs">Vel:</span>
+            <input type="range" id="fs-speed-range" min="0.1" max="20" step="0.1" value="1.5" oninput="changeSpeed(Number(this.value))" class="flex-1 accent-sabaot-red">
+            <span id="fs-speed-display" class="text-sabaot-red font-mono font-bold text-sm w-10 text-right">1.5</span>
+            <button onclick="adjustSpeed(-0.1)" class="px-2 py-1 btn-3d-metal text-slate-300 rounded-lg text-xs font-bold">-0.1</button>
+            <button onclick="adjustSpeed(0.1)" class="px-2 py-1 btn-3d-metal text-slate-300 rounded-lg text-xs font-bold">+0.1</button>
+        </div>
+
+        <div class="flex items-center gap-2 text-xs">
+            <button id="fs-btn-page-prev" onclick="changePage(-1)" class="px-2.5 py-1 btn-3d-metal text-white rounded-lg font-bold hover:scale-105 active:scale-95 transition-transform">◀</button>
+            <input id="fs-page-input" type="number" min="1" value="1"
+                   onchange="goToPage(this.value)"
+                   onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();goToPage(this.value);}"
+                   class="w-14 bg-black text-white text-center font-mono rounded-md py-1 border border-red-950 outline-none focus:border-sabaot-red shadow-inner">
+            <span class="text-slate-400">/</span>
+            <span id="fs-page-total" class="text-white font-mono">1</span>
+            <button id="fs-btn-page-next" onclick="changePage(1)" class="px-2.5 py-1 btn-3d-metal text-white rounded-lg font-bold hover:scale-105 active:scale-95 transition-transform">▶</button>
+        </div>
+
+        <button onclick="toggleFullscreenLandscape()" class="px-4 py-2 btn-3d-red text-white rounded-xl text-xs font-bold">Salir</button>
+    </div>
+</div>
+
+<script>
+let currentPdfDoc = null;
+let currentMetadata = { title: '', key: 'C', speed: 1.5, quality: 'high', currentPage: 1, sections: [] };
+let currentFileName = '';
+let isPlaying = false;
+let currentSpeed = 1.5;
+let scrollAccumulator = 0;
+let currentQuality = 'high';
+let currentPage = 1;
+let totalPages = 1;
+let animationFrameId = null;
+let lastTime = 0;
+let isInFsMode = false;
+
+const pdfRenderContainer = document.getElementById('pdf-render-container');
+const normalViewport = document.getElementById('scroll-viewport');
+const fsOverlay = document.getElementById('fs-overlay');
+const fsPdfContainer = document.getElementById('fs-pdf-container');
+
+// Textos bíblicos para la tarjeta decorativa
+const bibleVerses = [
+    { text: "Porque de tal manera amó Dios al mundo, que ha dado a su Hijo unigénito, para que todo aquel que en él cree, no se pierda, mas tenga vida eterna.", ref: "Juan 3:16" },
+    { text: "Todo lo puedo en Cristo que me fortalece.", ref: "Filipenses 4:13" },
+    { text: "Jehová es mi pastor; nada me faltará.", ref: "Salmos 23:1" },
+    { text: "Porque yo sé los pensamientos que tengo acerca de vosotros, dice Jehová, pensamientos de paz, y no de mal, para daros el fin que esperáis.", ref: "Jeremías 29:11" },
+    { text: "Fíate de Jehová de todo tu corazón, y no te apoyes en tu propia prudencia. Reconócelo en todos tus caminos, y él enderezará tus veredas.", ref: "Proverbios 3:5-6" },
+    { text: "Y sabemos que a los que aman a Dios, todas las cosas les ayudan a bien, esto es, a los que conforme a su propósito son llamados.", ref: "Romanos 8:28" },
+    { text: "No temas, porque yo estoy contigo; no desmayes, porque yo soy tu Dios que te esfuerzo; siempre te ayudaré, siempre te sustentaré con la diestra de mi justicia.", ref: "Isaías 41:10" },
+    { text: "Venid a mí todos los que estáis trabajados y cargados, y yo os haré descansar.", ref: "Mateo 11:28" },
+    { text: "La paz os dejo, mi paz os doy; yo no os la doy como el mundo la da. No se turbe vuestro corazón, ni tenga miedo.", ref: "Juan 14:27" },
+    { text: "Mira que te mando que te esfuerces y seas valiente; no temas ni desmayes, porque Jehová tu Dios estará contigo en dondequiera que vayas.", ref: "Josué 1:9" },
+    { text: "Lámpara es a mis pies tu palabra, y lumbrera a mi camino.", ref: "Salmos 119:105" },
+    { text: "Es, pues, la fe la certeza de lo que se espera, la convicción de lo que no se ve.", ref: "Hebreos 11:1" },
+    { text: "El amor es sufrido, es benigno; el amor no tiene envidia, el amor no es jactancioso, no se envanece.", ref: "1 Corintios 13:4" },
+    { text: "Mas el fruto del Espíritu es amor, gozo, paz, paciencia, benignidad, bondad, fe, mansedumbre, templanza.", ref: "Gálatas 5:22-23" },
+    { text: "Jesús le dijo: Yo soy el camino, y la verdad, y la vida; nadie viene al Padre, sino por mí.", ref: "Juan 14:6" },
+    { text: "Dios es nuestro amparo y fortaleza, nuestro pronto auxilio en las tribulaciones.", ref: "Salmos 46:1" },
+    { text: "Cercano está Jehová a todos los que le invocan, a todos los que le invocan de veras.", ref: "Salmos 145:18" },
+    { text: "Torre fuerte es el nombre de Jehová; a él correrá el justo, y será levantado.", ref: "Proverbios 18:10" },
+    { text: "El que habita al abrigo del Altísimo morará bajo la sombra del Omnipotente.", ref: "Salmos 91:1" },
+    { text: "Buscad primeramente el reino de Dios y su justicia, y todas estas cosas os serán añadidas.", ref: "Mateo 6:33" },
+    { text: "Si Dios es por nosotros, ¿quién contra nosotros?", ref: "Romanos 8:31" },
+    { text: "Cantad a él, cantadle salmos; hablad de todas sus maravillas.", ref: "Salmos 105:2" },
+    { text: "Alabad a Jehová con arpa; cantadle salmos con el salterio de diez cuerdas. Cantadle cántico nuevo; hacedlo bien, tañendo con júbilo.", ref: "Salmos 33:2-3" },
+    { text: "Alabaré yo el nombre de Dios con cántico, lo exaltaré con alabanza.", ref: "Salmos 69:30" },
+    { text: "Todo lo que respira alabe a JAH. Aleluya.", ref: "Salmos 150:6" }
+];
+
+function loadRandomVerse() {
+    const verseEl = document.getElementById('bible-verse-text');
+    const refEl = document.getElementById('bible-verse-ref');
+    if (!verseEl || !refEl) return;
+    const randomObj = bibleVerses[Math.floor(Math.random() * bibleVerses.length)];
+    verseEl.textContent = '“' + randomObj.text + '”';
+    refEl.textContent = '— ' + randomObj.ref;
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', loadRandomVerse);
+} else {
+    loadRandomVerse();
+}
+
+function getScrollTarget() {
+    return isInFsMode ? fsPdfContainer : normalViewport;
+}
+
+// ====== CARGA DE PDF ======
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('pdf-file-input');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('border-sabaot-red'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('border-sabaot-red'));
+dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('border-sabaot-red');
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', (e) => {
+    if (e.target.files && e.target.files[0]) handleFile(e.target.files[0]);
+});
+
+async function handleFile(file) {
+    if (!file.type.includes('pdf') && !file.name.toLowerCase().endsWith('.pdf')) {
+        alert('Por favor, selecciona un archivo PDF válido.');
+        return;
+    }
+    currentFileName = file.name;
+    document.getElementById('upload-content').classList.add('hidden');
+    document.getElementById('loading-content').classList.remove('hidden');
+    document.getElementById('loading-content').classList.add('flex');
+
+    try {
+        const arrayBuffer = await file.arrayBuffer();
+        currentPdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        totalPages = currentPdfDoc.numPages;
+
+        let fullText = '';
+        let sections = [];
+        for (let i = 1; i <= totalPages; i++) {
+            const page = await currentPdfDoc.getPage(i);
+            const textContent = await page.getTextContent();
+            textContent.items.forEach(item => {
+                fullText += item.str + ' ';
+                const t = item.str.trim().toLowerCase();
+                let type = null;
+                if (t.includes('intro')) type = 'intro';
+                else if (t.includes('verso') || t.includes('estrofa')) type = 'verse';
+                else if (t.includes('coro')) type = 'chorus';
+                else if (t.includes('puente') || t.includes('bridge')) type = 'bridge';
+                else if (t.includes('solo')) type = 'solo';
+                else if (t.includes('outro')) type = 'outro';
+                if (type && item.str.length < 25) sections.push({ name: item.str, pageNumber: i });
+            });
+        }
+
+        let key = 'C Major';
+        const keyMatch = fullText.match(/(?:key|tonalidad|ton):\s*([A-G][b#]?(?:\s*(?:m|maj|min))?)/i);
+        if (keyMatch && keyMatch[1]) key = keyMatch[1].trim();
+
+        let title = file.name.replace(/\.[^/.]+$/, '');
+        const lines = fullText.split('\n').map(l => l.trim()).filter(l => l.length > 2);
+        if (lines.length > 0 && lines[0].length < 40) title = lines[0];
+
+        const presets = JSON.parse(localStorage.getItem('sabaot_scroll_presets') || '[]');
+        const existing = presets.find(p => p.fileName === currentFileName);
+        if (existing) {
+            currentMetadata = existing.metadata;
+            currentSpeed = typeof currentMetadata.speed === 'number' ? currentMetadata.speed : 1.5;
+            currentQuality = currentMetadata.quality || 'high';
+            currentPage = typeof currentMetadata.currentPage === 'number' ? currentMetadata.currentPage : 1;
+        } else {
+            currentMetadata = {
+                title, key, speed: 1.5, quality: 'high', currentPage: 1,
+                sections: sections.length > 0 ? sections : [{ name: 'Inicio', pageNumber: 1 }]
+            };
+            currentSpeed = 1.5; currentQuality = 'high'; currentPage = 1;
+        }
+
+        changeSpeed(currentSpeed);
+        updateQualityUI();
+        await initWorkspace();
+    } catch (err) {
+        console.error(err);
+        alert('Error al procesar el PDF.');
+        document.getElementById('upload-content').classList.remove('hidden');
+        document.getElementById('loading-content').classList.add('hidden');
+        document.getElementById('loading-content').classList.remove('flex');
+    }
+}
+
+async function initWorkspace() {
+    document.getElementById('view-upload').classList.add('hidden');
+    document.getElementById('view-workspace').classList.remove('hidden');
+    document.getElementById('view-workspace').classList.add('flex');
+
+    document.getElementById('song-title-display').innerHTML =
+        `${currentMetadata.title} <span class="text-xs px-2 py-0.5 rounded-full bg-red-600/20 text-red-400 font-mono border border-red-900/50">Key: ${currentMetadata.key}</span>`;
+    document.getElementById('song-filename-display').innerText = `Archivo: ${currentFileName}`;
+
+    updatePageIndicator();
+    await renderPdfPages();
+    loadPresetsUI();
+    
+    // Jump to saved page after initial render
+    if (currentPage > 1) {
+        setTimeout(() => goToPage(currentPage), 100);
+    }
+}
+
+// ====== RENDERIZADO PDF ======
+async function renderPdfPages() {
+    pdfRenderContainer.innerHTML = '';
+    let scale = 2.0;
+    if (currentQuality === 'low') scale = 1.0;
+    else if (currentQuality === 'medium') scale = 1.5;
+    else if (currentQuality === 'ultra') scale = 2.5;
+
+    for (let i = 1; i <= totalPages; i++) {
+        const page = await currentPdfDoc.getPage(i);
+        let viewport = page.getViewport({ scale });
+        if (viewport.width > 4096 || viewport.height > 4096) {
+            viewport = page.getViewport({ scale: 1.5 });
+        }
+        const canvas = document.createElement('canvas');
+        canvas.className = 'mx-auto mb-6 shadow-2xl rounded-lg border border-red-950 bg-white max-w-full h-auto';
+        canvas.id = `pdf-page-${i}`;
+        canvas.dataset.pageNumber = i;
+        const ctx = canvas.getContext('2d');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        pdfRenderContainer.appendChild(canvas);
+    }
+}
+
+async function setQuality(level) {
+    currentQuality = level;
+    currentMetadata.quality = level;
+    updateQualityUI();
+    if (currentPdfDoc) {
+        await renderPdfPages();
+        goToPage(currentPage);
+    }
+}
+
+function updateQualityUI() {
+    ['low', 'medium', 'high', 'ultra'].forEach(lvl => {
+        const btn = document.getElementById(`q-${lvl}`);
+        if (!btn) return;
+        if (lvl === currentQuality) btn.className = 'py-1.5 rounded-lg btn-3d-red text-white font-bold';
+        else btn.className = 'py-1.5 rounded-lg text-slate-400 hover:text-white font-medium';
+    });
+}
+
+// ====== SELECTOR DE PÁGINA FIX ======
+function updatePageIndicator() {
+    const inp = document.getElementById('page-input');
+    const tot = document.getElementById('page-total');
+    const finp = document.getElementById('fs-page-input');
+    const ftot = document.getElementById('fs-page-total');
+    if (inp) inp.value = currentPage;
+    if (tot) tot.innerText = totalPages;
+    if (finp) finp.value = currentPage;
+    if (ftot) ftot.innerText = totalPages;
+}
+
+function changePage(dir) {
+    const targetPage = currentPage + dir;
+    if (targetPage >= 1 && targetPage <= totalPages) {
+        goToPage(targetPage);
+    }
+}
+
+function goToPage(pageNum) {
+    if (!currentPdfDoc) return;
+    const p = Math.floor(Number(pageNum));
+    if (!Number.isFinite(p) || p < 1 || p > totalPages) {
+        updatePageIndicator();
+        return;
+    }
+
+    currentPage = p;
+    currentMetadata.currentPage = currentPage;
+    updatePageIndicator();
+
+    // Target current canvas page
+    const targetCanvas = document.getElementById(`pdf-page-${p}`) || pdfRenderContainer.querySelector(`canvas[data-page-number="${p}"]`);
+    const container = getScrollTarget();
+
+    if (targetCanvas && container) {
+        // Calculate relative position within container
+        const targetTop = targetCanvas.offsetTop - 12;
+        
+        container.scrollTo({
+            top: targetTop,
+            behavior: 'smooth'
+        });
+    }
+
+    saveSpeedPresetSilently();
+}
+
+// ====== PANTALLA COMPLETA ======
+async function toggleFullscreenLandscape() {
+    if (isInFsMode) await exitFullscreenMode();
+    else await enterFullscreenMode();
+}
+
+async function enterFullscreenMode() {
+    const wasPlaying = isPlaying;
+    if (wasPlaying) togglePlay();
+
+    try {
+        fsPdfContainer.appendChild(pdfRenderContainer);
+        fsOverlay.classList.remove('hidden');
+        fsOverlay.classList.add('flex');
+        isInFsMode = true;
+
+        const target = document.getElementById(`pdf-page-${currentPage}`);
+        if (target) {
+            setTimeout(() => {
+                fsPdfContainer.scrollTop = target.offsetTop - 12;
+            }, 50);
+        }
+
+        try {
+            if (fsOverlay.requestFullscreen) await fsOverlay.requestFullscreen();
+            else if (fsOverlay.webkitRequestFullscreen) await fsOverlay.webkitRequestFullscreen();
+        } catch (e) { console.warn('Fullscreen API falló:', e); }
+
+        try {
+            if (screen.orientation && screen.orientation.lock) {
+                await screen.orientation.lock('landscape');
+            }
+        } catch (e) { console.warn('Orientation lock no disponible:', e); }
+
+        syncFsControls();
+    } catch (err) {
+        console.error('Error al entrar en modo inmersivo:', err);
+        await exitFullscreenMode();
+        return;
+    }
+
+    if (wasPlaying) setTimeout(() => { if (!isPlaying) togglePlay(); }, 200);
+}
+
+async function exitFullscreenMode() {
+    const wasPlaying = isPlaying;
+    if (wasPlaying) togglePlay();
+
+    try {
+        if (document.fullscreenElement) { try { await document.exitFullscreen(); } catch(e){} }
+        if (document.webkitFullscreenElement) { try { await document.webkitExitFullscreen(); } catch(e){} }
+        try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch(e){}
+
+        normalViewport.appendChild(pdfRenderContainer);
+        fsOverlay.classList.add('hidden');
+        fsOverlay.classList.remove('flex');
+        isInFsMode = false;
+
+        const target = document.getElementById(`pdf-page-${currentPage}`);
+        if (target) {
+            setTimeout(() => {
+                normalViewport.scrollTop = target.offsetTop - 12;
+            }, 50);
+        }
+    } catch (err) {
+        console.error('Error al salir de modo inmersivo:', err);
+    }
+
+    if (wasPlaying) setTimeout(() => { if (!isPlaying) togglePlay(); }, 200);
+}
+
+document.addEventListener('fullscreenchange', () => {
+    if (!document.fullscreenElement && isInFsMode) {
+        const wasPlaying = isPlaying;
+        if (wasPlaying) togglePlay();
+        normalViewport.appendChild(pdfRenderContainer);
+        fsOverlay.classList.add('hidden');
+        fsOverlay.classList.remove('flex');
+        isInFsMode = false;
+        if (wasPlaying) setTimeout(() => { if (!isPlaying) togglePlay(); }, 200);
+    }
+});
+
+function syncFsControls() {
+    const fsSpeed = document.getElementById('fs-speed-display');
+    const fsRange = document.getElementById('fs-speed-range');
+    const fsText = document.getElementById('fs-play-text');
+    if (fsSpeed) fsSpeed.innerText = currentSpeed.toFixed(1);
+    if (fsRange) fsRange.value = currentSpeed;
+    if (fsText) fsText.innerText = isPlaying ? 'Pausar' : 'Iniciar';
+    updatePageIndicator();
+}
+
+// ====== PLAY / PAUSA ======
+function togglePlay() {
+    isPlaying = !isPlaying;
+    const btnText = document.getElementById('play-btn-text');
+    const playBtn = document.getElementById('play-pause-btn');
+    const fsText = document.getElementById('fs-play-text');
+    const fsBtn = document.getElementById('fs-play-btn');
+
+    if (isPlaying) {
+        if (btnText) btnText.innerText = 'Pausar';
+        if (playBtn) playBtn.className = 'flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm btn-3d-amber text-slate-950';
+        if (fsText) fsText.innerText = 'Pausar';
+        if (fsBtn) fsBtn.className = 'px-4 py-2 btn-3d-amber text-slate-950 rounded-xl text-xs font-bold';
+        lastTime = performance.now();
+        animationFrameId = requestAnimationFrame(scrollLoop);
+    } else {
+        if (btnText) btnText.innerText = 'Iniciar Scroll';
+        if (playBtn) playBtn.className = 'flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm btn-3d-red text-white';
+        if (fsText) fsText.innerText = 'Iniciar';
+        if (fsBtn) fsBtn.className = 'px-4 py-2 btn-3d-red text-white rounded-xl text-xs font-bold';
+        cancelAnimationFrame(animationFrameId);
+    }
+}
+
+function scrollLoop(time) {
+    if (!isPlaying) return;
+    const delta = (time - lastTime) / 1000;
+    lastTime = time;
+    const target = getScrollTarget();
+    const pixelsPerSec = currentSpeed * 10;
+    scrollAccumulator += pixelsPerSec * delta;
+    if (scrollAccumulator >= 1.0) {
+        const move = Math.floor(scrollAccumulator);
+        target.scrollTop += move;
+        scrollAccumulator -= move;
+        
+        // Detect current visible page while scrolling
+        detectCurrentVisiblePage(target);
+    }
+    animationFrameId = requestAnimationFrame(scrollLoop);
+}
+
+function detectCurrentVisiblePage(container) {
+    const canvases = pdfRenderContainer.querySelectorAll('canvas');
+    const containerTop = container.scrollTop;
+    
+    for (let canvas of canvases) {
+        const pNum = Number(canvas.dataset.pageNumber);
+        if (canvas.offsetTop + (canvas.offsetHeight / 2) >= containerTop) {
+            if (currentPage !== pNum) {
+                currentPage = pNum;
+                currentMetadata.currentPage = currentPage;
+                updatePageIndicator();
+            }
+            break;
+        }
+    }
+}
+
+function changeSpeed(val) {
+    currentSpeed = Math.min(20.0, Math.max(0.1, Number(val)));
+    currentMetadata.speed = currentSpeed;
+    const main = document.getElementById('speed-val-display');
+    const range = document.getElementById('speed-range');
+    if (main) main.innerText = currentSpeed.toFixed(1);
+    if (range) range.value = currentSpeed;
+    const fsSpeed = document.getElementById('fs-speed-display');
+    const fsRange = document.getElementById('fs-speed-range');
+    if (fsSpeed) fsSpeed.innerText = currentSpeed.toFixed(1);
+    if (fsRange) fsRange.value = currentSpeed;
+}
+
+function adjustSpeed(a) { changeSpeed(currentSpeed + a); }
+
+function resetScroll() {
+    if (isPlaying) togglePlay();
+    goToPage(1);
+    scrollAccumulator = 0;
+}
+
+function jumpStep(n) { getScrollTarget().scrollTop += n; }
+
+// ====== PRESETS ======
+function saveSpeedPreset() {
+    const presets = JSON.parse(localStorage.getItem('sabaot_scroll_presets') || '[]');
+    const newPreset = {
+        id: Math.random().toString(36).substr(2, 9),
+        fileName: currentFileName,
+        metadata: { ...currentMetadata, speed: currentSpeed, quality: currentQuality, currentPage }
+    };
+    const updated = [newPreset, ...presets.filter(p => p.fileName !== currentFileName)];
+    localStorage.setItem('sabaot_scroll_presets', JSON.stringify(updated));
+    loadPresetsUI();
+}
+
+function saveSpeedPresetSilently() {
+    const presets = JSON.parse(localStorage.getItem('sabaot_scroll_presets') || '[]');
+    const existing = presets.find(p => p.fileName === currentFileName);
+    if (existing) {
+        existing.metadata.currentPage = currentPage;
+        localStorage.setItem('sabaot_scroll_presets', JSON.stringify(presets));
+    }
+}
+
+function applySpeedPreset(spd) { changeSpeed(spd); }
+
+function loadPresetsUI() {
+    const list = document.getElementById('presets-list');
+    const presets = JSON.parse(localStorage.getItem('sabaot_scroll_presets') || '[]');
+    if (presets.length === 0) {
+        list.innerHTML = '<p class="text-slate-500 text-center py-2">No hay presets guardados aún.</p>';
+        return;
+    }
+    list.innerHTML = presets.map(p => `
+        <div onclick="applyPreset('${p.id}')" class="flex items-center justify-between p-2.5 bg-sabaot-darker hover:bg-zinc-800 border border-red-950 rounded-xl cursor-pointer shadow-md">
+            <div>
+                <p class="font-semibold text-white">${p.metadata.title}</p>
+                <p class="text-[10px] text-sabaot-red">Vel: ${p.metadata.speed.toFixed(1)} | Pág: ${p.metadata.currentPage || 1}</p>
+            </div>
+            <button onclick="event.stopPropagation(); deletePreset('${p.id}')" class="text-slate-500 hover:text-red-400 p-1">✕</button>
+        </div>
+    `).join('');
+}
+
+async function applyPreset(id) {
+    const presets = JSON.parse(localStorage.getItem('sabaot_scroll_presets') || '[]');
+    const found = presets.find(p => p.id === id);
+    if (found) {
+        currentMetadata = found.metadata;
+        changeSpeed(found.metadata.speed || 1.5);
+        currentQuality = found.metadata.quality || 'high';
+        currentPage = found.metadata.currentPage || 1;
+        updateQualityUI();
+        if (currentPdfDoc) {
+            await renderPdfPages();
+            goToPage(currentPage);
+        }
+    }
+}
+
+function deletePreset(id) {
+    const presets = JSON.parse(localStorage.getItem('sabaot_scroll_presets') || '[]');
+    localStorage.setItem('sabaot_scroll_presets', JSON.stringify(presets.filter(p => p.id !== id)));
+    loadPresetsUI();
+}
+
+// ====== RESET ======
+function resetWorkspace() {
+    if (isInFsMode) exitFullscreenMode();
+    currentPdfDoc = null;
+    isPlaying = false;
+    cancelAnimationFrame(animationFrameId);
+    document.getElementById('view-workspace').classList.add('hidden');
+    document.getElementById('view-workspace').classList.remove('flex');
+    document.getElementById('view-upload').classList.remove('hidden');
+    document.getElementById('upload-content').classList.remove('hidden');
+    document.getElementById('loading-content').classList.add('hidden');
+    document.getElementById('loading-content').classList.remove('flex');
+    fileInput.value = '';
+    loadRandomVerse();
+}
+
+// Click para pausar/reanudar
+normalViewport.addEventListener('click', (e) => {
+    if (e.target.closest('button') || e.target.closest('input')) return;
+    togglePlay();
+});
+fsPdfContainer.addEventListener('click', (e) => {
+    if (e.target.closest('button') || e.target.closest('input')) return;
+    togglePlay();
+});
+</script>
+</body>
+</html>
